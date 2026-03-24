@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Application needs ASP.NET Core APIs for UserManager, SignInManager -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- NuGet packages -->
+  <ItemGroup>
+    <!-- For creating and reading JWT tokens -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
+  </ItemGroup>
+
+  <!-- Project reference: Application depends on Domain only (Clean Architecture rule) -->
+  <ItemGroup>
+    <ProjectReference Include="..\Gradely.Domain\Gradely.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
