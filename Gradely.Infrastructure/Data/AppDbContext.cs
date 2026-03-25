@@ -28,11 +28,27 @@ namespace Gradely.Infrastructure.Data
         {
         }
 
-        // ── Future DbSets will go here ──────────────────────────────
-        // public DbSet<Course> Courses { get; set; }
-        // public DbSet<Assignment> Assignments { get; set; }
-        // public DbSet<Submission> Submissions { get; set; }
-        // public DbSet<Report> Reports { get; set; }
+        // ── DbSets ───────────────────────────────────────────────────
+        // Each DbSet<T> maps to one table in the database.
+        // EF Core uses the property name as the table name by default.
+        //   DbSet<Assignment> Assignments  →  [Assignments] table
+        //   DbSet<Submission> Submissions  →  [Submissions] table
+        //   DbSet<Report>     Reports      →  [Reports] table
+
+        /// <summary>
+        /// The Assignments table — tasks created for students to complete.
+        /// </summary>
+        public DbSet<Assignment> Assignments { get; set; }
+
+        /// <summary>
+        /// The Submissions table — student PDF uploads linked to assignments.
+        /// </summary>
+        public DbSet<Submission> Submissions { get; set; }
+
+        /// <summary>
+        /// The Reports table — ML-generated grading results for submissions.
+        /// </summary>
+        public DbSet<Report> Reports { get; set; }
 
         // ── Model Configuration ─────────────────────────────────────
         protected override void OnModelCreating(ModelBuilder builder)
@@ -42,21 +58,25 @@ namespace Gradely.Infrastructure.Data
             // If you skip this, Identity tables won't be created.
             base.OnModelCreating(builder);
 
-            // ── Configure ApplicationUser table ──
-            builder.Entity<ApplicationUser>(entity =>
-            {
-                // FullName is required and has a max length
-                entity.Property(u => u.FullName)
-                      .IsRequired()
-                      .HasMaxLength(100);
-
-                // CreatedAt has a default value set by the database
-                entity.Property(u => u.CreatedAt)
-                      .HasDefaultValueSql("GETUTCDATE()");
-            });
+            // ── Apply all entity configurations from the Configurations folder ──
+            // This single line replaces hundreds of lines of inline Fluent API config.
+            // 
+            // HOW IT WORKS:
+            //   1. EF Core scans this assembly (Gradely.Infrastructure) 
+            //   2. Finds ALL classes that implement IEntityTypeConfiguration<T>
+            //      (ApplicationUserConfig, AssignmentConfig, SubmissionConfig, ReportConfig)
+            //   3. Calls their Configure() method automatically
+            //
+            // WHY THIS PATTERN?
+            //   - AppDbContext stays clean and short
+            //   - Each entity's config is in its own file (Data/Configurations/)
+            //   - Adding a new entity = just add a new Config class, no changes here
+            //   - Easy for team members to find and edit configs independently
+            builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
             // ── Seed the 3 roles into the database ──
-            // This means when you run the migration, these roles are automatically inserted.
+            // This stays here (not in a Config class) because role seeding
+            // is database seed data, not entity configuration.
             // The IDs are fixed GUIDs so migrations are repeatable (same ID every time).
             builder.Entity<IdentityRole>().HasData(
                 new IdentityRole

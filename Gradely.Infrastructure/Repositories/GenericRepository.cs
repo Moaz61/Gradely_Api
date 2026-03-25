@@ -35,10 +35,33 @@ namespace Gradely.Infrastructure.Repositories
         // ── READ operations ──────────────────────────────────────────
 
         /// <summary>
-        /// Find one entity by its primary key.
+        /// Find one entity by its primary key (string version).
+        /// Used for entities with string IDs like ApplicationUser.
         /// EF Core is smart enough to know which column is the PK.
         /// </summary>
         public async Task<T?> GetByIdAsync(string id)
+        {
+            return await _dbSet.FindAsync(id);
+        }
+
+        /// <summary>
+        /// Find one entity by its primary key (Guid version).
+        /// Used for our custom entities (Assignment, Submission, Report).
+        /// 
+        /// WHY A SEPARATE METHOD?
+        ///   FindAsync accepts "params object[]" — it can take any type.
+        ///   But our interface has typed overloads (string and Guid) so:
+        ///   1. Callers don't need to cast: _repo.GetByIdAsync(myGuid) just works
+        ///   2. Compile-time type safety — you can't accidentally pass an int
+        ///   3. IntelliSense shows the right parameter type
+        /// 
+        /// UNDER THE HOOD:
+        ///   FindAsync(id) does:
+        ///   1. First checks EF's change tracker (in-memory cache)
+        ///   2. If not found, queries the DB: SELECT * FROM [Table] WHERE Id = @id
+        ///   3. Returns null if not found
+        /// </summary>
+        public async Task<T?> GetByIdAsync(Guid id)
         {
             return await _dbSet.FindAsync(id);
         }

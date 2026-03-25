@@ -12,9 +12,22 @@ namespace Gradely.Domain.Interfaces
     public interface IGenericRepository<T> where T : class
     {
         /// <summary>
-        /// Get a single entity by its primary key.
+        /// Get a single entity by its primary key (string version).
+        /// Used for entities with string IDs (e.g. ApplicationUser from ASP.NET Identity).
         /// </summary>
         Task<T?> GetByIdAsync(string id);
+
+        /// <summary>
+        /// Get a single entity by its primary key (Guid version).
+        /// Used for our custom entities (Assignment, Submission, Report) that use Guid PKs.
+        /// 
+        /// WHY TWO OVERLOADS?
+        ///   ASP.NET Identity uses string IDs (e.g. "a1b2c3d4-...").
+        ///   Our custom entities use Guid IDs (e.g. Guid.NewGuid()).
+        ///   EF Core's FindAsync() can handle both, but we need typed overloads
+        ///   so callers don't have to convert Guid → string manually.
+        /// </summary>
+        Task<T?> GetByIdAsync(Guid id);
 
         /// <summary>
         /// Get all entities of this type.

@@ -15,13 +15,13 @@ namespace Gradely.Infrastructure.UnitOfWork
     ///     → Either everything saves, or nothing saves. All-or-nothing.
     /// 
     /// HOW TO USE (in a service):
-    ///   _unitOfWork.Users.AddAsync(newUser);       // stage the change
-    ///   await _unitOfWork.CompleteAsync();          // save to DB
+    ///   _unitOfWork.Submissions.AddAsync(newSubmission);   // stage the change
+    ///   await _unitOfWork.CompleteAsync();                  // save to DB
     /// 
-    /// LATER (when you add more entities):
-    ///   Just add new repository properties here:
-    ///   public IGenericRepository<Course> Courses { get; private set; }
-    ///   public IGenericRepository<Assignment> Assignments { get; private set; }
+    /// ADDING A NEW ENTITY:
+    ///   1. Add a property:  public IGenericRepository<NewEntity> NewEntities { get; private set; }
+    ///   2. Initialize it:   NewEntities = new GenericRepository<NewEntity>(context);
+    ///   That's it! The GenericRepository handles all CRUD automatically.
     /// </summary>
     public class UnitOfWork : IUnitOfWork
     {
@@ -31,15 +31,44 @@ namespace Gradely.Infrastructure.UnitOfWork
         // ── Repository Properties ────────────────────────────────────
         // Each property gives access to a repository for a specific entity.
         // "private set" = only this class can assign the repository (set in constructor).
+        // ALL repositories share the SAME _context — this is the key to transactional safety.
+
         public IGenericRepository<ApplicationUser> Users { get; private set; }
+
+        /// <summary>
+        /// Repository for managing Assignment entities.
+        /// Used by AssignmentService to query assignments.
+        /// </summary>
+        public IGenericRepository<Assignment> Assignments { get; private set; }
+
+        /// <summary>
+        /// Repository for managing Submission entities.
+        /// Used by SubmissionService to create and query submissions.
+        /// </summary>
+        public IGenericRepository<Submission> Submissions { get; private set; }
+
+        /// <summary>
+        /// Repository for managing Report entities (ML grading results).
+        /// Used by SubmissionService to fetch reports, and later by ML webhook to create them.
+        /// </summary>
+        public IGenericRepository<Report> Reports { get; private set; }
 
         // ── Constructor ──────────────────────────────────────────────
         // All repositories share the SAME _context instance.
         // This is the key — one context = one transaction.
+        //
+        // WHAT HAPPENS HERE:
+        //   1. DI creates ONE AppDbContext for this HTTP request
+        //   2. We pass that SAME context to every GenericRepository
+        //   3. When any repo calls AddAsync/Update/Delete, changes are staged in the SAME context
+        //   4. CompleteAsync() saves ALL changes in one transaction
         public UnitOfWork(AppDbContext context)
         {
             _context = context;
             Users = new GenericRepository<ApplicationUser>(context);
+            Assignments = new GenericRepository<Assignment>(context);
+            Submissions = new GenericRepository<Submission>(context);
+            Reports = new GenericRepository<Report>(context);
         }
 
         // ── Save all changes ─────────────────────────────────────────

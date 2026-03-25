@@ -136,6 +136,12 @@ namespace Gradely.Api
 
             app.UseHttpsRedirection();
 
+            // ── Serve static files from wwwroot/ ──
+            // This enables serving uploaded PDF files from wwwroot/uploads/.
+            // Without this, files saved to wwwroot won't be accessible via HTTP.
+            // Example: a file saved to wwwroot/uploads/abc.pdf is served at /uploads/abc.pdf
+            app.UseStaticFiles();
+
             // CORS must come before auth
             app.UseCors("AllowAll");
 
