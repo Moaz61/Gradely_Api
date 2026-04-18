@@ -50,6 +50,11 @@ namespace Gradely.Infrastructure.Data
         /// </summary>
         public DbSet<Report> Reports { get; set; }
 
+        /// <summary>
+        /// The RefreshTokens table — stores refresh tokens for JWT token rotation.
+        /// </summary>
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
+
         // ── Model Configuration ─────────────────────────────────────
         protected override void OnModelCreating(ModelBuilder builder)
         {

@@ -34,5 +34,14 @@ namespace Gradely.Application.DTOs.Auth
 
         /// <summary>The user's role (Student, Teacher, or Admin).</summary>
         public string Role { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The refresh token — a long-lived token used to get a new access token
+        /// when the current one expires, without re-entering credentials.
+        /// </summary>
+        public string RefreshToken { get; set; } = string.Empty;
+
+        /// <summary>When the refresh token expires (30 days from creation).</summary>
+        public DateTime RefreshTokenExpiresAt { get; set; }
     }
 }

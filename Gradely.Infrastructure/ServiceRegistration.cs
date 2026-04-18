@@ -68,6 +68,14 @@ namespace Gradely.Infrastructure
             // ── 4. Register Unit of Work ─────────────────────────────
             services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
 
+            // ── 5. Register DbContext base type ──────────────────────
+            // AuthService (in Application layer) injects DbContext (base class)
+            // because it can't reference AppDbContext (that would break Clean Architecture).
+            // This registration tells DI: "When someone asks for DbContext, give them AppDbContext."
+            services.AddScoped<Microsoft.EntityFrameworkCore.DbContext>(
+                sp => sp.GetRequiredService<AppDbContext>()
+            );
+
             return services;
         }
     }

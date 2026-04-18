@@ -1,11 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Gradely.Application.DTOs.Auth;
 using Gradely.Domain.Entities;
 using Gradely.Domain.Enums;
 using Gradely.Domain.Interfaces;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -24,7 +26,7 @@ namespace Gradely.Application.Services
     ///   - UserManager: ASP.NET Identity service to create/find/manage users
     ///   - SignInManager: ASP.NET Identity service to verify passwords
     ///   - IConfiguration: Reads JWT settings from appsettings.json
-    ///   - IUnitOfWork: Not used directly for auth (Identity handles it), but available for future use
+    ///   - DbContext: Used to store/retrieve refresh tokens
     /// </summary>
     public class AuthService : IAuthService
     {
@@ -32,30 +34,33 @@ namespace Gradely.Application.Services
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly IConfiguration _configuration;
+        private readonly DbContext _dbContext;
 
         public AuthService(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            DbContext dbContext)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _configuration = configuration;
+            _dbContext = dbContext;
         }
 
         // ══════════════════════════════════════════════════════════════
         //  REGISTER
         // ══════════════════════════════════════════════════════════════
         /// <summary>
-        /// Creates a new user account and returns a JWT token.
+        /// Creates a new user account and returns a JWT access token + refresh token.
         /// 
         /// FLOW:
         ///   1. Cast the object to RegisterDto (because IAuthService uses object)
         ///   2. Check if email already exists
         ///   3. Create the user with Identity (hashes password automatically)
         ///   4. Assign the "Student" role
-        ///   5. Generate a JWT token
-        ///   6. Return the token + user info
+        ///   5. Generate a JWT access token + refresh token
+        ///   6. Return both tokens + user info
         /// </summary>
         public async Task<(bool Succeeded, object? Data, string? Error)> RegisterAsync(object registerDto)
         {
@@ -91,9 +96,11 @@ namespace Gradely.Application.Services
             // Every new user starts as a Student. Admins can upgrade later.
             await _userManager.AddToRoleAsync(user, UserRole.Student.ToString());
 
-            // ── Step 5 & 6: Generate JWT and return response ──
-            var token = await GenerateJwtToken(user);
-            var response = CreateAuthResponse(user, token);
+            // ── Step 5 & 6: Generate tokens and return response ──
+            var accessToken = await GenerateJwtToken(user);
+            var refreshToken = await CreateRefreshTokenAsync(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            var response = CreateAuthResponse(user, accessToken, refreshToken, roles);
             return (true, response, null);
         }
 
@@ -101,13 +108,13 @@ namespace Gradely.Application.Services
         //  LOGIN
         // ══════════════════════════════════════════════════════════════
         /// <summary>
-        /// Verifies email + password and returns a JWT token.
+        /// Verifies email + password and returns a JWT access token + refresh token.
         /// 
         /// FLOW:
         ///   1. Find user by email
         ///   2. Check password with SignInManager
-        ///   3. Generate JWT token
-        ///   4. Return token + user info
+        ///   3. Generate JWT access token + refresh token
+        ///   4. Return both tokens + user info
         /// </summary>
         public async Task<(bool Succeeded, object? Data, string? Error)> LoginAsync(object loginDto)
         {
@@ -129,9 +136,11 @@ namespace Gradely.Application.Services
             // NOTE: We say "Invalid email or password" for BOTH cases (user not found / wrong password)
             // This is a security best practice — don't reveal whether the email exists.
 
-            // ── Step 3 & 4: Generate JWT and return ──
-            var token = await GenerateJwtToken(user);
-            var response = CreateAuthResponse(user, token);
+            // ── Step 3 & 4: Generate tokens and return ──
+            var accessToken = await GenerateJwtToken(user);
+            var refreshToken = await CreateRefreshTokenAsync(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            var response = CreateAuthResponse(user, accessToken, refreshToken, roles);
             return (true, response, null);
         }
 
@@ -165,11 +174,94 @@ namespace Gradely.Application.Services
         }
 
         // ══════════════════════════════════════════════════════════════
+        //  REFRESH TOKEN
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Validates an existing refresh token and issues a new access token + refresh token pair.
+        /// 
+        /// THIS IS CALLED "TOKEN ROTATION":
+        ///   1. Client sends the old refresh token
+        ///   2. We verify it exists, is not expired, and is not revoked
+        ///   3. We revoke the old refresh token (can't be reused)
+        ///   4. We create a NEW refresh token
+        ///   5. We generate a NEW access token
+        ///   6. Return both new tokens
+        /// 
+        /// WHY ROTATION?
+        ///   If someone steals a refresh token and tries to use it AFTER the real user
+        ///   already used it, it will be revoked → the attacker gets nothing.
+        /// </summary>
+        public async Task<(bool Succeeded, object? Data, string? Error)> RefreshTokenAsync(object refreshTokenDto)
+        {
+            var dto = refreshTokenDto as RefreshTokenDto;
+            if (dto == null)
+                return (false, null, "Invalid refresh token data.");
+
+            // ── Step 1: Find the refresh token in the database ──
+            var existingToken = await _dbContext.Set<RefreshToken>()
+                .Include(rt => rt.User)
+                .FirstOrDefaultAsync(rt => rt.Token == dto.RefreshToken);
+
+            if (existingToken == null)
+                return (false, null, "Invalid refresh token.");
+
+            // ── Step 2: Check if it's still valid ──
+            if (!existingToken.IsActive)
+            {
+                // Token is either expired or already revoked
+                if (existingToken.IsExpired)
+                    return (false, null, "Refresh token has expired. Please login again.");
+                if (existingToken.IsRevoked)
+                    return (false, null, "Refresh token has been revoked. Please login again.");
+            }
+
+            // ── Step 3: Revoke the old refresh token (token rotation) ──
+            existingToken.RevokedAt = DateTime.UtcNow;
+
+            // ── Step 4 & 5: Generate new tokens ──
+            var user = existingToken.User;
+            var newAccessToken = await GenerateJwtToken(user);
+            var newRefreshToken = await CreateRefreshTokenAsync(user);
+
+            // Save the revocation of the old token
+            await _dbContext.SaveChangesAsync();
+
+            // ── Step 6: Return the new tokens ──
+            var roles = await _userManager.GetRolesAsync(user);
+            var response = CreateAuthResponse(user, newAccessToken, newRefreshToken, roles);
+            return (true, response, null);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  REVOKE REFRESH TOKEN (LOGOUT)
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Revokes ALL active refresh tokens for a user.
+        /// Called during logout to ensure the user is fully signed out on all devices.
+        /// </summary>
+        public async Task<(bool Succeeded, string? Error)> RevokeRefreshTokenAsync(string userId)
+        {
+            // Find all active (non-revoked, non-expired) refresh tokens for this user
+            var activeTokens = await _dbContext.Set<RefreshToken>()
+                .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+                .ToListAsync();
+
+            // Mark them all as revoked
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+            }
+
+            await _dbContext.SaveChangesAsync();
+            return (true, null);
+        }
+
+        // ══════════════════════════════════════════════════════════════
         //  PRIVATE HELPERS
         // ══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Creates a JWT token for the given user.
+        /// Creates a JWT access token for the given user.
         /// 
         /// WHAT IS A JWT?
         ///   A JSON Web Token is a signed string that contains:
@@ -180,11 +272,9 @@ namespace Gradely.Application.Services
         ///   The client sends this in every request:
         ///   Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
         /// 
-        /// HOW IT WORKS HERE:
-        ///   1. We create a list of "claims" (key-value pairs about the user)
-        ///   2. We create a signing key from the secret in appsettings.json
-        ///   3. We build the token with claims + key + expiry
-        ///   4. We serialize it to a string
+        /// ACCESS TOKEN EXPIRY:
+        ///   Short-lived (30 minutes by default) for security.
+        ///   When it expires, the client uses the refresh token to get a new one.
         /// </summary>
         private async Task<string> GenerateJwtToken(ApplicationUser user)
         {
@@ -222,12 +312,13 @@ namespace Gradely.Application.Services
             );
 
             // ── Build the token ──
+            // Access token expires in minutes (short-lived for security)
+            var expiryMinutes = double.Parse(_configuration["Jwt:AccessTokenExpiryInMinutes"] ?? "30");
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddDays(
-                    double.Parse(_configuration["Jwt:ExpiryInDays"] ?? "7")
-                ),
+                Expires = DateTime.UtcNow.AddMinutes(expiryMinutes),
                 Issuer = _configuration["Jwt:Issuer"],
                 Audience = _configuration["Jwt:Audience"],
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
@@ -241,23 +332,64 @@ namespace Gradely.Application.Services
         }
 
         /// <summary>
-        /// Maps user + token into an AuthResponseDto.
-        /// Small helper to avoid duplicating this in Register and Login.
+        /// Creates a new refresh token, saves it to the database, and returns it.
+        /// 
+        /// HOW REFRESH TOKENS ARE GENERATED:
+        ///   1. Generate 32 random bytes using a cryptographic RNG
+        ///   2. Convert to Base64 string (URL-safe, unique, unpredictable)
+        ///   3. Save to the RefreshTokens table with the user's ID and expiry
+        /// 
+        /// WHY CRYPTOGRAPHIC RANDOM?
+        ///   Regular Random is predictable. An attacker could guess the next token.
+        ///   RandomNumberGenerator uses the OS's crypto provider — truly unpredictable.
         /// </summary>
-        private AuthResponseDto CreateAuthResponse(ApplicationUser user, string token)
+        private async Task<RefreshToken> CreateRefreshTokenAsync(ApplicationUser user)
         {
+            // Generate a cryptographically secure random token
+            var randomBytes = new byte[32];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(randomBytes);
+
+            var refreshTokenExpiryDays = double.Parse(
+                _configuration["Jwt:RefreshTokenExpiryInDays"] ?? "30"
+            );
+
+            var refreshToken = new RefreshToken
+            {
+                Token = Convert.ToBase64String(randomBytes),
+                UserId = user.Id,
+                ExpiresAt = DateTime.UtcNow.AddDays(refreshTokenExpiryDays),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // Save to database
+            _dbContext.Set<RefreshToken>().Add(refreshToken);
+            await _dbContext.SaveChangesAsync();
+
+            return refreshToken;
+        }
+
+        /// <summary>
+        /// Maps user + tokens into an AuthResponseDto.
+        /// Small helper to avoid duplicating this in Register, Login, and Refresh.
+        /// </summary>
+        private AuthResponseDto CreateAuthResponse(
+            ApplicationUser user,
+            string accessToken,
+            RefreshToken refreshToken,
+            IList<string> roles)
+        {
+            var expiryMinutes = double.Parse(_configuration["Jwt:AccessTokenExpiryInMinutes"] ?? "30");
+
             return new AuthResponseDto
             {
-                Token = token,
-                ExpiresAt = DateTime.UtcNow.AddDays(
-                    double.Parse(_configuration["Jwt:ExpiryInDays"] ?? "7")
-                ),
+                Token = accessToken,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes),
                 Email = user.Email ?? string.Empty,
                 FullName = user.FullName,
-                // We just assigned the role, so we know it's Student for Register
-                // For Login, we'd need to fetch roles — but CreateAuthResponse is called
-                // right after we already set the role, so this is fine.
-                Role = "Student"
+                Role = roles.FirstOrDefault() ?? "Student",
+                RefreshToken = refreshToken.Token,
+                RefreshTokenExpiresAt = refreshToken.ExpiresAt
             };
         }
     }

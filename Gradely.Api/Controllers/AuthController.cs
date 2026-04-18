@@ -45,6 +45,10 @@ namespace Gradely.Api.Controllers
         ///   → If validation passes, this method runs and calls AuthService
         /// 
         /// [AllowAnonymous] = no JWT token needed (anyone can register)
+        /// 
+        /// RESPONSE INCLUDES:
+        ///   - Access token (JWT, expires in 30 minutes)
+        ///   - Refresh token (random string, expires in 30 days)
         /// </summary>
         [HttpPost("register")]
         [AllowAnonymous]
@@ -62,10 +66,11 @@ namespace Gradely.Api.Controllers
         //  POST /api/auth/login
         // ══════════════════════════════════════════════════════════════
         /// <summary>
-        /// Login with email and password, receive a JWT token.
+        /// Login with email and password, receive a JWT access token + refresh token.
         /// 
-        /// The client stores this token and includes it in future requests:
-        ///   Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+        /// The client stores both tokens:
+        ///   - Access token: sent in every request as Authorization: Bearer eyJhbGciOi...
+        ///   - Refresh token: stored securely, used to get new access token when it expires
         /// 
         /// [AllowAnonymous] = no token needed (you're trying to GET a token)
         /// </summary>
@@ -116,27 +121,67 @@ namespace Gradely.Api.Controllers
         }
 
         // ══════════════════════════════════════════════════════════════
+        //  POST /api/auth/refresh
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Get a new access token using a refresh token.
+        /// 
+        /// WHEN TO USE:
+        ///   When the client's access token expires (after 30 minutes), instead of
+        ///   redirecting the user to the login page, the client calls this endpoint
+        ///   with the refresh token to silently get a new access token.
+        /// 
+        /// TOKEN ROTATION:
+        ///   Each call returns a NEW refresh token and revokes the old one.
+        ///   This means each refresh token can only be used ONCE — if someone steals it
+        ///   and tries to use it after the real user, it will be revoked.
+        /// 
+        /// [AllowAnonymous] = no JWT needed (the user's access token is expired!)
+        /// </summary>
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
+        {
+            var (succeeded, data, error) = await _authService.RefreshTokenAsync(refreshTokenDto);
+
+            if (!succeeded)
+                return Unauthorized(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ══════════════════════════════════════════════════════════════
         //  POST /api/auth/logout
         // ══════════════════════════════════════════════════════════════
         /// <summary>
         /// Logout the current user.
         /// 
-        /// WITH JWT, LOGOUT IS CLIENT-SIDE:
-        ///   JWTs are stateless — the server doesn't store sessions.
-        ///   So "logout" = the client deletes its stored token.
-        ///   This endpoint exists so the frontend has a consistent API to call.
+        /// WITH REFRESH TOKENS, LOGOUT IS NOW SERVER-SIDE:
+        ///   Unlike before (where JWT logout was purely client-side),
+        ///   we now revoke all active refresh tokens in the database.
+        ///   This means even if someone has the user's refresh token,
+        ///   they can't use it after logout.
         /// 
-        /// FOR REAL SERVER-SIDE LOGOUT (optional, more complex):
-        ///   You'd need a token blacklist (store revoked tokens in DB/Redis
-        ///   and check every request). Not needed for a graduation project.
+        /// The client should also:
+        ///   1. Delete the access token from localStorage/cookies
+        ///   2. Delete the refresh token from localStorage/cookies
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
-        public IActionResult Logout()
+        public async Task<IActionResult> Logout()
         {
-            // JWT is stateless — nothing to do on the server.
-            // The client should delete the token from localStorage/cookies.
-            return Ok(new { success = true, message = "Logged out successfully. Please remove your token." });
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { success = false, message = "Invalid token." });
+
+            // Revoke all active refresh tokens for this user
+            var (succeeded, error) = await _authService.RevokeRefreshTokenAsync(userId);
+
+            if (!succeeded)
+                return BadRequest(new { success = false, message = error });
+
+            return Ok(new { success = true, message = "Logged out successfully. All refresh tokens have been revoked." });
         }
     }
 }

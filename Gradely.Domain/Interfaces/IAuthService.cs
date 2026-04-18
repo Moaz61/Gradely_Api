@@ -29,5 +29,16 @@ namespace Gradely.Domain.Interfaces
         /// Get the current logged-in user's profile by their user ID.
         /// </summary>
         Task<(bool Succeeded, object? Data, string? Error)> GetCurrentUserAsync(string userId);
+
+        /// <summary>
+        /// Validate a refresh token and issue a new access token + refresh token pair.
+        /// Returns (success, data-or-null, errorMessage-or-null).
+        /// </summary>
+        Task<(bool Succeeded, object? Data, string? Error)> RefreshTokenAsync(object refreshTokenDto);
+
+        /// <summary>
+        /// Revoke all active refresh tokens for a user (used during logout).
+        /// </summary>
+        Task<(bool Succeeded, string? Error)> RevokeRefreshTokenAsync(string userId);
     }
 }
