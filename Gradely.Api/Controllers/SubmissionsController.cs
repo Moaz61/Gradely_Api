@@ -4,6 +4,7 @@ using Gradely.Application.Services;
 using Gradely.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace Gradely.Api.Controllers
 {
@@ -39,13 +40,16 @@ namespace Gradely.Api.Controllers
         //     (the interface can't reference IFormFile because it's in the Domain layer)
         private readonly ISubmissionService _submissionService;
         private readonly SubmissionService _submissionServiceConcrete;
+        private readonly IReportService _reportService;
 
         public SubmissionsController(
             ISubmissionService submissionService,
-            SubmissionService submissionServiceConcrete)
+            SubmissionService submissionServiceConcrete,
+            IReportService reportService)
         {
             _submissionService = submissionService;
             _submissionServiceConcrete = submissionServiceConcrete;
+            _reportService = reportService;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -185,6 +189,24 @@ namespace Gradely.Api.Controllers
 
             if (!succeeded)
                 return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  POST /api/submissions/{id}/report  ← ML Team calls this
+        // ══════════════════════════════════════════════════════════════
+        // [AllowAnonymous] overrides the class-level [Authorize(Roles = "Student")]
+        // because the ML team is not a student — they have no JWT token.
+        // In production you would protect this with an API key header check.
+        [AllowAnonymous]
+        [HttpPost("{id}/report")]
+        public async Task<IActionResult> SaveReport(Guid id, [FromBody] CreateReportDto dto)
+        {
+            var (succeeded, data, error) = await _reportService.SaveReportAsync(id, dto);
+
+            if (!succeeded)
+                return BadRequest(new { success = false, message = error });
 
             return Ok(new { success = true, data });
         }

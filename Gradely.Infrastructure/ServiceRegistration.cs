@@ -36,7 +36,6 @@ namespace Gradely.Infrastructure
             services.AddDbContext<AppDbContext>(options =>
                 options.UseSqlServer(
                     configuration.GetConnectionString("DefaultConnection"),
-                    // This tells EF that migrations live in the Infrastructure project
                     b => b.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)
                 )
             );

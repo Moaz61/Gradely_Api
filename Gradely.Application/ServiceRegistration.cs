@@ -39,6 +39,9 @@ namespace Gradely.Application
             services.AddScoped<ISubmissionService, SubmissionService>();
             services.AddScoped<SubmissionService>();
 
+            // Report service — handles saving ML grading results
+            services.AddScoped<IReportService, ReportService>();
+
             return services;
         }
     }
