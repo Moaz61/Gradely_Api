@@ -42,6 +42,10 @@ namespace Gradely.Application
             // Report service — handles saving ML grading results
             services.AddScoped<IReportService, ReportService>();
 
+            // Phase 5: teacher views + student dashboard
+            services.AddScoped<ITeacherService, TeacherService>();
+            services.AddScoped<IStudentService, StudentService>();
+
             return services;
         }
     }
