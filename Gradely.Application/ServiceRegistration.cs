@@ -46,6 +46,9 @@ namespace Gradely.Application
             services.AddScoped<ITeacherService, TeacherService>();
             services.AddScoped<IStudentService, StudentService>();
 
+            // Phase 6: admin panel
+            services.AddScoped<IAdminService, AdminService>();
+
             return services;
         }
     }

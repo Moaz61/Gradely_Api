@@ -1,7 +1,10 @@
 using System.Text;
 using Gradely.Application;
+using Gradely.Domain.Entities;
+using Gradely.Domain.Enums;
 using Gradely.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -9,7 +12,7 @@ namespace Gradely.Api
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -127,6 +130,11 @@ namespace Gradely.Api
             // ══════════════════════════════════════════════════════════
             var app = builder.Build();
 
+            // ── Seed default Admin user ──
+            // Creates admin@gradely.com if it doesn't exist yet.
+            // Must run after Build() so DI services are available.
+            await SeedAdminUserAsync(app.Services);
+
             // Swagger UI — only in development
             if (app.Environment.IsDevelopment())
             {
@@ -155,6 +163,52 @@ namespace Gradely.Api
             app.MapControllers();
 
             app.Run();
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  SEED ADMIN USER
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Creates a default Admin user if one doesn't exist yet.
+        /// 
+        /// WHY SEED AT STARTUP?
+        ///   The Admin role is seeded via EF Core HasData (in AppDbContext),
+        ///   but we can't seed the Admin USER with HasData because Identity
+        ///   needs to hash the password using UserManager.
+        ///   So we create a DI scope at startup and use UserManager directly.
+        ///
+        /// CREDENTIALS:
+        ///   Email:    admin@gradely.com
+        ///   Password: Admin@123
+        /// </summary>
+        private static async Task SeedAdminUserAsync(IServiceProvider serviceProvider)
+        {
+            using var scope = serviceProvider.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+            const string adminEmail = "admin@gradely.com";
+            const string adminPassword = "Admin@123";
+
+            // Check if admin already exists
+            var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
+            if (existingAdmin != null)
+                return; // already seeded — nothing to do
+
+            var adminUser = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                FullName = "System Admin",
+                CreatedAt = DateTime.UtcNow,
+                IsVerified = true,
+                EmailConfirmed = true
+            };
+
+            var result = await userManager.CreateAsync(adminUser, adminPassword);
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(adminUser, UserRole.Admin.ToString());
+            }
         }
     }
 }

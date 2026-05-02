@@ -37,6 +37,10 @@ namespace Gradely.Infrastructure.Data.Configurations
             // CreatedAt has a default value set by the database
             builder.Property(u => u.CreatedAt)
                    .HasDefaultValueSql("GETUTCDATE()");
+
+            // IsVerified defaults to false — admin can verify teacher accounts
+            builder.Property(u => u.IsVerified)
+                   .HasDefaultValue(false);
         }
     }
 }

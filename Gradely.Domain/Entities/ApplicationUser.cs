@@ -18,5 +18,12 @@ namespace Gradely.Domain.Entities
         /// When the account was created.
         /// </summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// Whether the user has been verified by an admin.
+        /// Primarily used for Teacher accounts — an admin marks a teacher
+        /// as verified via PUT /api/admin/teachers/{id}/verify.
+        /// </summary>
+        public bool IsVerified { get; set; } = false;
     }
 }
