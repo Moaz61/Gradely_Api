@@ -9,9 +9,9 @@ namespace Gradely.Api.Controllers
     /// Admin API Controller (Phase 6).
     ///
     /// ENDPOINTS:
-    ///   GET    /api/admin/users                → list all users
+    ///   GET    /api/admin/users                → list all users (excluding admins)
     ///   POST   /api/admin/teachers             → create a teacher account
-    ///   DELETE /api/admin/teachers/{id}        → remove a teacher
+    ///   DELETE /api/admin/users/{id}           → remove a teacher or student
     ///   PUT    /api/admin/teachers/{id}/verify → mark teacher as verified
     ///   GET    /api/admin/stats                → system-wide statistics
     ///
@@ -67,18 +67,19 @@ namespace Gradely.Api.Controllers
             return Ok(new { success = true, data });
         }
 
-        // ── DELETE /api/admin/teachers/{id} ────────────────────────────
+        // ── DELETE /api/admin/users/{id} ──────────────────────────────
         /// <summary>
-        /// Delete a teacher account by ID.
+        /// Delete a user account (Teacher or Student) by ID.
+        /// Admin accounts cannot be deleted through this endpoint.
         /// </summary>
-        [HttpDelete("teachers/{id}")]
-        public async Task<IActionResult> DeleteTeacher(string id)
+        [HttpDelete("users/{id}")]
+        public async Task<IActionResult> DeleteUser(string id)
         {
             var (succeeded, error) = await _adminService.DeleteTeacherAsync(id);
             if (!succeeded)
                 return NotFound(new { success = false, message = error });
 
-            return Ok(new { success = true, message = "Teacher deleted successfully." });
+            return Ok(new { success = true, message = "User deleted successfully." });
         }
 
         // ── PUT /api/admin/teachers/{id}/verify ───────────────────────

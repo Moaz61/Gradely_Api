@@ -35,9 +35,8 @@ namespace Gradely.Application.Services
 
         // ── GET /api/admin/users ──────────────────────────────────────
         /// <summary>
-        /// Returns all users in the system with their role.
-        /// Uses UserManager.Users to get all users, then looks up each
-        /// user's role with GetRolesAsync.
+        /// Returns all users in the system with their role,
+        /// EXCLUDING admin accounts (admins should not appear in the user list).
         /// </summary>
         public async Task<(bool Succeeded, object? Data, string? Error)> GetAllUsersAsync()
         {
@@ -47,6 +46,11 @@ namespace Gradely.Application.Services
             foreach (var user in users)
             {
                 var roles = await _userManager.GetRolesAsync(user);
+
+                // Skip admin users — they should not appear in the list
+                if (roles.Contains(UserRole.Admin.ToString()))
+                    continue;
+
                 userDtos.Add(new UserDto
                 {
                     Id = user.Id,
@@ -116,22 +120,22 @@ namespace Gradely.Application.Services
             return (true, userDto, null);
         }
 
-        // ── DELETE /api/admin/teachers/{id} ────────────────────────────
+        // ── DELETE /api/admin/users/{id} ────────────────────────────────
         /// <summary>
-        /// Deletes a teacher account.
-        /// Only users with the "Teacher" role can be deleted through this
-        /// endpoint — this prevents accidentally deleting admins or students.
+        /// Deletes a user account (Teacher or Student).
+        /// Admin accounts CANNOT be deleted through this endpoint — this
+        /// prevents accidentally removing admin access from the system.
         /// </summary>
-        public async Task<(bool Succeeded, string? Error)> DeleteTeacherAsync(string teacherId)
+        public async Task<(bool Succeeded, string? Error)> DeleteTeacherAsync(string userId)
         {
-            var user = await _userManager.FindByIdAsync(teacherId);
+            var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
                 return (false, "User not found.");
 
-            // Confirm the user is actually a Teacher
+            // Block deletion of Admin accounts
             var roles = await _userManager.GetRolesAsync(user);
-            if (!roles.Contains(UserRole.Teacher.ToString()))
-                return (false, "This user is not a teacher. Only teacher accounts can be deleted from this endpoint.");
+            if (roles.Contains(UserRole.Admin.ToString()))
+                return (false, "Cannot delete an admin account.");
 
             var result = await _userManager.DeleteAsync(user);
             if (!result.Succeeded)
