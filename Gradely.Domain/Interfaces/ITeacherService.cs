@@ -23,5 +23,30 @@ namespace Gradely.Domain.Interfaces
         Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionReportAsync(Guid submissionId);
 
         Task<(bool Succeeded, object? Data, string? Error)> GetStatsAsync();
+
+        /// <summary>
+        /// Create a new assignment.
+        /// 
+        /// Used by: POST /api/teacher/assignments
+        /// Auth: Teacher role
+        /// </summary>
+        Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto);
+
+        /// <summary>
+        /// Update an existing assignment by ID.
+        /// 
+        /// Used by: PUT /api/teacher/assignments/{id}
+        /// Auth: Teacher role
+        /// </summary>
+        Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto);
+
+        /// <summary>
+        /// Delete an assignment by ID.
+        /// Prevents deletion if the assignment has submissions.
+        /// 
+        /// Used by: DELETE /api/teacher/assignments/{id}
+        /// Auth: Teacher role
+        /// </summary>
+        Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id);
     }
 }

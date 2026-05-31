@@ -182,7 +182,107 @@ namespace Gradely.Application.Services
             return (true, stats, null);
         }
 
+        // ── POST /api/teacher/assignments ─────────────────────────────
+        /// <summary>
+        /// Creates a new Assignment entity from the DTO and saves it to the database.
+        /// Returns the created assignment as an AssignmentDto.
+        /// </summary>
+        public async Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto)
+        {
+            var createDto = dto as CreateAssignmentDto;
+            if (createDto == null)
+                return (false, null, "Invalid assignment data.");
+
+            var assignment = new Assignment
+            {
+                Id = Guid.NewGuid(),
+                Title = createDto.Title,
+                Description = createDto.Description,
+                DueDate = createDto.DueDate,
+                MaxGrade = createDto.MaxGrade,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _unitOfWork.Assignments.AddAsync(assignment);
+            await _unitOfWork.CompleteAsync();
+
+            var responseDto = new AssignmentDto
+            {
+                Id = assignment.Id,
+                Title = assignment.Title,
+                Description = assignment.Description,
+                DueDate = assignment.DueDate,
+                MaxGrade = assignment.MaxGrade,
+                CreatedAt = assignment.CreatedAt
+            };
+
+            return (true, responseDto, null);
+        }
+
+        // ── PUT /api/teacher/assignments/{id} ─────────────────────────
+        /// <summary>
+        /// Updates an existing assignment's fields.
+        /// Returns the updated assignment as an AssignmentDto.
+        /// </summary>
+        public async Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto)
+        {
+            var updateDto = dto as UpdateAssignmentDto;
+            if (updateDto == null)
+                return (false, null, "Invalid assignment data.");
+
+            var assignment = await _unitOfWork.Assignments.GetByIdAsync(id);
+            if (assignment == null)
+                return (false, null, "Assignment not found.");
+
+            // Update the fields
+            assignment.Title = updateDto.Title;
+            assignment.Description = updateDto.Description;
+            assignment.DueDate = updateDto.DueDate;
+            assignment.MaxGrade = updateDto.MaxGrade;
+
+            _unitOfWork.Assignments.Update(assignment);
+            await _unitOfWork.CompleteAsync();
+
+            var responseDto = new AssignmentDto
+            {
+                Id = assignment.Id,
+                Title = assignment.Title,
+                Description = assignment.Description,
+                DueDate = assignment.DueDate,
+                MaxGrade = assignment.MaxGrade,
+                CreatedAt = assignment.CreatedAt
+            };
+
+            return (true, responseDto, null);
+        }
+
+        // ── DELETE /api/teacher/assignments/{id} ──────────────────────
+        /// <summary>
+        /// Deletes an assignment by ID.
+        /// Safety: refuses to delete if the assignment has any submissions
+        /// (to avoid orphaning student work).
+        /// </summary>
+        public async Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id)
+        {
+            var assignment = await _unitOfWork.Assignments.GetByIdAsync(id);
+            if (assignment == null)
+                return (false, null, "Assignment not found.");
+
+            // Safety check: don't delete if students have already submitted work
+            var submissions = await _unitOfWork.Submissions
+                .FindAsync(s => s.AssignmentId == id);
+
+            if (submissions.Any())
+                return (false, null, $"Cannot delete this assignment because it has {submissions.Count()} submission(s). Remove submissions first.");
+
+            _unitOfWork.Assignments.Delete(assignment);
+            await _unitOfWork.CompleteAsync();
+
+            return (true, new { message = "Assignment deleted successfully." }, null);
+        }
+
         // ── Helpers ───────────────────────────────────────────────────
+
         private static void BumpDistribution(GradeDistributionDto dist, double percent)
         {
             if (percent < 60) dist.Below60++;

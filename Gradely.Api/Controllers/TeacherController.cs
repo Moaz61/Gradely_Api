@@ -1,3 +1,4 @@
+using Gradely.Application.DTOs.Teacher;
 using Gradely.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,10 +9,13 @@ namespace Gradely.Api.Controllers
     /// Teacher API Controller (Phase 5).
     ///
     /// ENDPOINTS:
-    ///   GET /api/teacher/assignments                       → list all assignments
-    ///   GET /api/teacher/assignments/{id}/submissions      → all student submissions for one assignment
-    ///   GET /api/teacher/submissions/{id}/report           → any student's report
-    ///   GET /api/teacher/stats                             → grade averages + distribution
+    ///   GET    /api/teacher/assignments                       → list all assignments
+    ///   GET    /api/teacher/assignments/{id}/submissions      → all student submissions for one assignment
+    ///   GET    /api/teacher/submissions/{id}/report           → any student's report
+    ///   GET    /api/teacher/stats                             → grade averages + distribution
+    ///   POST   /api/teacher/assignments                      → create a new assignment
+    ///   PUT    /api/teacher/assignments/{id}                  → update an existing assignment
+    ///   DELETE /api/teacher/assignments/{id}                  → delete an assignment
     ///
     /// AUTH: every endpoint requires the "Teacher" role.
     ///
@@ -69,5 +73,86 @@ namespace Gradely.Api.Controllers
 
             return Ok(new { success = true, data });
         }
+
+        // ══════════════════════════════════════════════════════════════
+        //  POST /api/teacher/assignments — Create a new assignment
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Create a new assignment.
+        ///
+        /// FLOW:
+        ///   1. Teacher sends POST with JSON body (title, description, dueDate, maxGrade)
+        ///   2. ASP.NET validates the DTO (Data Annotations)
+        ///   3. Service creates the Assignment entity and saves to DB
+        ///   4. Returns 201 Created with the new assignment data
+        ///
+        /// RETURNS:
+        ///   201 Created → { success: true, data: { id, title, ... } }
+        ///   400 Bad Request → validation errors
+        ///   401/403 → unauthorized or wrong role
+        /// </summary>
+        [HttpPost("assignments")]
+        public async Task<IActionResult> CreateAssignment([FromBody] CreateAssignmentDto dto)
+        {
+            var (succeeded, data, error) = await _teacherService.CreateAssignmentAsync(dto);
+            if (!succeeded)
+                return BadRequest(new { success = false, message = error });
+
+            return StatusCode(201, new { success = true, data });
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  PUT /api/teacher/assignments/{id} — Update an assignment
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Update an existing assignment.
+        ///
+        /// RETURNS:
+        ///   200 OK → { success: true, data: { id, title, ... } }
+        ///   404 Not Found → assignment doesn't exist
+        ///   400 Bad Request → validation errors
+        ///   401/403 → unauthorized or wrong role
+        /// </summary>
+        [HttpPut("assignments/{id}")]
+        public async Task<IActionResult> UpdateAssignment(Guid id, [FromBody] UpdateAssignmentDto dto)
+        {
+            var (succeeded, data, error) = await _teacherService.UpdateAssignmentAsync(id, dto);
+            if (!succeeded)
+            {
+                if (error == "Assignment not found.")
+                    return NotFound(new { success = false, message = error });
+                return BadRequest(new { success = false, message = error });
+            }
+
+            return Ok(new { success = true, data });
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  DELETE /api/teacher/assignments/{id} — Delete an assignment
+        // ══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Delete an assignment by ID.
+        /// Will refuse if the assignment has any submissions (safety check).
+        ///
+        /// RETURNS:
+        ///   200 OK → { success: true, data: { message: "..." } }
+        ///   404 Not Found → assignment doesn't exist
+        ///   400 Bad Request → has submissions, can't delete
+        ///   401/403 → unauthorized or wrong role
+        /// </summary>
+        [HttpDelete("assignments/{id}")]
+        public async Task<IActionResult> DeleteAssignment(Guid id)
+        {
+            var (succeeded, data, error) = await _teacherService.DeleteAssignmentAsync(id);
+            if (!succeeded)
+            {
+                if (error == "Assignment not found.")
+                    return NotFound(new { success = false, message = error });
+                return BadRequest(new { success = false, message = error });
+            }
+
+            return Ok(new { success = true, data });
+        }
     }
 }
+
