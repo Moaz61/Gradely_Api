@@ -90,6 +90,11 @@ namespace Gradely.Application.Services
             if (assignment == null)
                 return (false, null, "Assignment not found.");
 
+            // ── Step 3b: Check if the due date has passed ──
+            // Students cannot submit after the assignment deadline.
+            if (DateTime.UtcNow > assignment.DueDate)
+                return (false, null, "Cannot submit — the due date for this assignment has passed.");
+
             // ── Step 4: Check for duplicate submission ──
             // Use FindAsync with a predicate to find any existing submission
             // with the same AssignmentId AND StudentId.
@@ -133,6 +138,11 @@ namespace Gradely.Application.Services
             var assignment = await _unitOfWork.Assignments.GetByIdAsync(dto.AssignmentId);
             if (assignment == null)
                 return (false, null, "Assignment not found.");
+
+            // ── Step 2b: Check if the due date has passed ──
+            // Students cannot submit after the assignment deadline.
+            if (DateTime.UtcNow > assignment.DueDate)
+                return (false, null, "Cannot submit — the due date for this assignment has passed.");
 
             // ── Step 3: Check for duplicate submission ──
             var existingSubmissions = await _unitOfWork.Submissions
