@@ -2,6 +2,7 @@ using Gradely.Application.DTOs.Teacher;
 using Gradely.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Gradely.Api.Controllers
 {
@@ -94,7 +95,11 @@ namespace Gradely.Api.Controllers
         [HttpPost("assignments")]
         public async Task<IActionResult> CreateAssignment([FromBody] CreateAssignmentDto dto)
         {
-            var (succeeded, data, error) = await _teacherService.CreateAssignmentAsync(dto);
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.CreateAssignmentAsync(dto, teacherId);
             if (!succeeded)
                 return BadRequest(new { success = false, message = error });
 

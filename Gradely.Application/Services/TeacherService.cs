@@ -59,7 +59,11 @@ namespace Gradely.Application.Services
             foreach (var submission in submissions)
             {
                 // Look up the student so we can show name + email.
-                var student = await _unitOfWork.Users.GetByIdAsync(submission.StudentId);
+                ApplicationUser? student = null;
+                if (!string.IsNullOrEmpty(submission.StudentId))
+                {
+                    student = await _unitOfWork.Users.GetByIdAsync(submission.StudentId);
+                }
 
                 // Look up the report (may be null if not graded yet).
                 var reports = await _unitOfWork.Reports
@@ -187,7 +191,7 @@ namespace Gradely.Application.Services
         /// Creates a new Assignment entity from the DTO and saves it to the database.
         /// Returns the created assignment as an AssignmentDto.
         /// </summary>
-        public async Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto)
+        public async Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto, string teacherId)
         {
             var createDto = dto as CreateAssignmentDto;
             if (createDto == null)
@@ -200,6 +204,7 @@ namespace Gradely.Application.Services
                 Description = createDto.Description,
                 DueDate = createDto.DueDate,
                 MaxGrade = createDto.MaxGrade,
+                TeacherId = teacherId,
                 CreatedAt = DateTime.UtcNow
             };
 

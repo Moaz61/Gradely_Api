@@ -15,7 +15,7 @@ namespace Gradely.Application.DTOs.Teacher
         public string AssignmentTitle { get; set; } = string.Empty;
 
         // Student info — the teacher needs to see who submitted.
-        public string StudentId { get; set; } = string.Empty;
+        public string? StudentId { get; set; }
         public string StudentName { get; set; } = string.Empty;
         public string StudentEmail { get; set; } = string.Empty;
 

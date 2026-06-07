@@ -28,17 +28,14 @@ namespace Gradely.Infrastructure.Data.Configurations
             builder.Property(s => s.Id)
                    .HasDefaultValueSql("NEWID()");
 
-            // ── UNIQUE CONSTRAINT: One submission per student per assignment ──
+            // ── UNIQUE CONSTRAINT: One active submission per student per assignment ──
             // HasIndex creates a database index on these two columns.
             // IsUnique makes it a UNIQUE constraint.
-            // 
-            // WHY?
-            //   Without this, a student could submit multiple times to the
-            //   same assignment, which would break our grading flow.
-            //   The DB will reject duplicate (AssignmentId + StudentId) pairs
-            //   with a clear SQL error, which we catch in the service layer.
+            // HasFilter ensures the constraint is only enforced for active students
+            // (i.e. StudentId is not NULL). This allows multiple submissions from deleted students.
             builder.HasIndex(s => new { s.AssignmentId, s.StudentId })
                    .IsUnique()
+                   .HasFilter("[StudentId] IS NOT NULL")
                    .HasDatabaseName("IX_Submission_Assignment_Student");
 
             // ── Relationship: Submission → Assignment (many-to-one) ──
@@ -56,17 +53,12 @@ namespace Gradely.Infrastructure.Data.Configurations
                    .OnDelete(DeleteBehavior.Cascade);
 
             // ── Relationship: Submission → Student (many-to-one) ──
-            // RESTRICT = you can NOT delete a User who has submissions.
-            //   This prevents accidental data loss.
-            //   If you need to delete a user, delete their submissions first.
-            //
-            // WHY RESTRICT and not CASCADE?
-            //   Deleting a user shouldn't silently delete all their academic records.
-            //   That would be a data integrity nightmare.
+            // SET NULL = when a Student is deleted, their StudentId is set to NULL,
+            //   but the Submission record (and academic file) remains in the DB.
             builder.HasOne(s => s.Student)
                    .WithMany()    // ApplicationUser doesn't have a Submissions collection
                    .HasForeignKey(s => s.StudentId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                   .OnDelete(DeleteBehavior.SetNull);
 
             // FileName has a max length to prevent absurdly long names
             builder.Property(s => s.OriginalFileName)

@@ -45,9 +45,9 @@ namespace Gradely.Domain.Entities
         /// <summary>
         /// FK to the student (ApplicationUser) who submitted.
         /// It's a string because ASP.NET Identity uses string IDs (GUIDs stored as strings).
+        /// Nullable because if a student is deleted, their submissions are retained (SetNull behavior).
         /// </summary>
-        [Required]
-        public string StudentId { get; set; } = string.Empty;
+        public string? StudentId { get; set; }
 
         // ── File Info ────────────────────────────────────────────────
 

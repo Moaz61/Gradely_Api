@@ -30,7 +30,7 @@ namespace Gradely.Domain.Interfaces
         /// Used by: POST /api/teacher/assignments
         /// Auth: Teacher role
         /// </summary>
-        Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto);
+        Task<(bool Succeeded, object? Data, string? Error)> CreateAssignmentAsync(object dto, string teacherId);
 
         /// <summary>
         /// Update an existing assignment by ID.

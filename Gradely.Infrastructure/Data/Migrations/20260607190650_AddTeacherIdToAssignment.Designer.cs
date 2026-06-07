@@ -4,6 +4,7 @@ using Gradely.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Gradely.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260607190650_AddTeacherIdToAssignment")]
+    partial class AddTeacherIdToAssignment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -124,6 +127,7 @@ namespace Gradely.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("TeacherId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Title")
@@ -231,6 +235,7 @@ namespace Gradely.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("StudentId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("SubmittedAt")
@@ -244,8 +249,7 @@ namespace Gradely.Infrastructure.Migrations
 
                     b.HasIndex("AssignmentId", "StudentId")
                         .IsUnique()
-                        .HasDatabaseName("IX_Submission_Assignment_Student")
-                        .HasFilter("[StudentId] IS NOT NULL");
+                        .HasDatabaseName("IX_Submission_Assignment_Student");
 
                     b.ToTable("Submissions");
                 });
@@ -408,7 +412,8 @@ namespace Gradely.Infrastructure.Migrations
                     b.HasOne("Gradely.Domain.Entities.ApplicationUser", "Teacher")
                         .WithMany()
                         .HasForeignKey("TeacherId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Teacher");
                 });
@@ -446,7 +451,8 @@ namespace Gradely.Infrastructure.Migrations
                     b.HasOne("Gradely.Domain.Entities.ApplicationUser", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Assignment");
 

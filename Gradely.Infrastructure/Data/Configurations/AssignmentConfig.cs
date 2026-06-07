@@ -40,6 +40,15 @@ namespace Gradely.Infrastructure.Data.Configurations
             // CreatedAt: auto-set to UTC when the row is inserted
             builder.Property(a => a.CreatedAt)
                    .HasDefaultValueSql("GETUTCDATE()");
+
+            // Relationship: Assignment → Teacher (many-to-one)
+            // A teacher can create many assignments.
+            // On delete: SET NULL (when a teacher is deleted, TeacherId becomes NULL,
+            // but the assignments remain intact in the database).
+            builder.HasOne(a => a.Teacher)
+                   .WithMany()
+                   .HasForeignKey(a => a.TeacherId)
+                   .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

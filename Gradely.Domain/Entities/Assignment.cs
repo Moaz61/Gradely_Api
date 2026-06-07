@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Gradely.Domain.Entities
 {
@@ -66,7 +67,20 @@ namespace Gradely.Domain.Entities
         /// </summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// FK to the teacher (ApplicationUser) who created this assignment.
+        /// Nullable because if a teacher is deleted, their assignments are retained (SetNull behavior).
+        /// </summary>
+        public string? TeacherId { get; set; }
+
         // ── Navigation Property ──────────────────────────────────────
+
+        /// <summary>
+        /// The teacher who created this assignment.
+        /// </summary>
+        [ForeignKey(nameof(TeacherId))]
+        public ApplicationUser? Teacher { get; set; }
+
         /// <summary>
         /// All submissions for this assignment (one-to-many relationship).
         /// 
