@@ -27,9 +27,9 @@ namespace Gradely.Application.Services
         }
 
         // ── GET /api/teacher/assignments ──────────────────────────────
-        public async Task<(bool Succeeded, object? Data, string? Error)> GetAllAssignmentsAsync()
+        public async Task<(bool Succeeded, object? Data, string? Error)> GetAllAssignmentsAsync(string teacherId)
         {
-            var assignments = await _unitOfWork.Assignments.GetAllAsync();
+            var assignments = await _unitOfWork.Assignments.FindAsync(a => a.TeacherId == teacherId);
 
             var dtos = assignments.Select(a => new AssignmentDto
             {
@@ -46,11 +46,11 @@ namespace Gradely.Application.Services
 
         // ── GET /api/teacher/assignments/{id}/submissions ─────────────
         public async Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionsForAssignmentAsync(
-            Guid assignmentId)
+            Guid assignmentId, string teacherId)
         {
             var assignment = await _unitOfWork.Assignments.GetByIdAsync(assignmentId);
-            if (assignment == null)
-                return (false, null, "Assignment not found.");
+            if (assignment == null || assignment.TeacherId != teacherId)
+                return (false, null, "Assignment not found or you do not have permission to view its submissions.");
 
             var submissions = await _unitOfWork.Submissions
                 .FindAsync(s => s.AssignmentId == assignmentId);
@@ -90,11 +90,15 @@ namespace Gradely.Application.Services
 
         // ── GET /api/teacher/submissions/{id}/report ──────────────────
         public async Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionReportAsync(
-            Guid submissionId)
+            Guid submissionId, string teacherId)
         {
             var submission = await _unitOfWork.Submissions.GetByIdAsync(submissionId);
             if (submission == null)
                 return (false, null, "Submission not found.");
+
+            var assignment = await _unitOfWork.Assignments.GetByIdAsync(submission.AssignmentId);
+            if (assignment == null || assignment.TeacherId != teacherId)
+                return (false, null, "Submission report not found or you do not have permission to view it.");
 
             var reports = await _unitOfWork.Reports
                 .FindAsync(r => r.SubmissionId == submissionId);
@@ -117,11 +121,15 @@ namespace Gradely.Application.Services
         }
 
         // ── GET /api/teacher/stats ────────────────────────────────────
-        public async Task<(bool Succeeded, object? Data, string? Error)> GetStatsAsync()
+        public async Task<(bool Succeeded, object? Data, string? Error)> GetStatsAsync(string teacherId)
         {
-            var assignments = (await _unitOfWork.Assignments.GetAllAsync()).ToList();
-            var submissions = (await _unitOfWork.Submissions.GetAllAsync()).ToList();
-            var reports = (await _unitOfWork.Reports.GetAllAsync()).ToList();
+            var assignments = (await _unitOfWork.Assignments.FindAsync(a => a.TeacherId == teacherId)).ToList();
+            
+            var assignmentIds = assignments.Select(a => a.Id).ToHashSet();
+            var submissions = (await _unitOfWork.Submissions.FindAsync(s => assignmentIds.Contains(s.AssignmentId))).ToList();
+            
+            var submissionIds = submissions.Select(s => s.Id).ToHashSet();
+            var reports = (await _unitOfWork.Reports.FindAsync(r => submissionIds.Contains(r.SubmissionId))).ToList();
 
             // Map SubmissionId → Report for fast lookup.
             var reportBySubmission = reports.ToDictionary(r => r.SubmissionId);
@@ -229,15 +237,15 @@ namespace Gradely.Application.Services
         /// Updates an existing assignment's fields.
         /// Returns the updated assignment as an AssignmentDto.
         /// </summary>
-        public async Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto)
+        public async Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto, string teacherId)
         {
             var updateDto = dto as UpdateAssignmentDto;
             if (updateDto == null)
                 return (false, null, "Invalid assignment data.");
 
             var assignment = await _unitOfWork.Assignments.GetByIdAsync(id);
-            if (assignment == null)
-                return (false, null, "Assignment not found.");
+            if (assignment == null || assignment.TeacherId != teacherId)
+                return (false, null, "Assignment not found or you do not have permission to update it.");
 
             // Update the fields
             assignment.Title = updateDto.Title;
@@ -267,11 +275,11 @@ namespace Gradely.Application.Services
         /// Safety: refuses to delete if the assignment has any submissions
         /// (to avoid orphaning student work).
         /// </summary>
-        public async Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id)
+        public async Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id, string teacherId)
         {
             var assignment = await _unitOfWork.Assignments.GetByIdAsync(id);
-            if (assignment == null)
-                return (false, null, "Assignment not found.");
+            if (assignment == null || assignment.TeacherId != teacherId)
+                return (false, null, "Assignment not found or you do not have permission to delete it.");
 
             // Safety check: don't delete if students have already submitted work
             var submissions = await _unitOfWork.Submissions

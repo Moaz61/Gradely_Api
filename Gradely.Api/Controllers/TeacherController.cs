@@ -38,7 +38,11 @@ namespace Gradely.Api.Controllers
         [HttpGet("assignments")]
         public async Task<IActionResult> GetAllAssignments()
         {
-            var (succeeded, data, error) = await _teacherService.GetAllAssignmentsAsync();
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetAllAssignmentsAsync(teacherId);
             if (!succeeded)
                 return BadRequest(new { success = false, message = error });
 
@@ -48,7 +52,11 @@ namespace Gradely.Api.Controllers
         [HttpGet("assignments/{id}/submissions")]
         public async Task<IActionResult> GetSubmissionsForAssignment(Guid id)
         {
-            var (succeeded, data, error) = await _teacherService.GetSubmissionsForAssignmentAsync(id);
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetSubmissionsForAssignmentAsync(id, teacherId);
             if (!succeeded)
                 return NotFound(new { success = false, message = error });
 
@@ -58,7 +66,11 @@ namespace Gradely.Api.Controllers
         [HttpGet("submissions/{id}/report")]
         public async Task<IActionResult> GetSubmissionReport(Guid id)
         {
-            var (succeeded, data, error) = await _teacherService.GetSubmissionReportAsync(id);
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetSubmissionReportAsync(id, teacherId);
             if (!succeeded)
                 return NotFound(new { success = false, message = error });
 
@@ -68,7 +80,11 @@ namespace Gradely.Api.Controllers
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats()
         {
-            var (succeeded, data, error) = await _teacherService.GetStatsAsync();
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetStatsAsync(teacherId);
             if (!succeeded)
                 return BadRequest(new { success = false, message = error });
 
@@ -121,10 +137,14 @@ namespace Gradely.Api.Controllers
         [HttpPut("assignments/{id}")]
         public async Task<IActionResult> UpdateAssignment(Guid id, [FromBody] UpdateAssignmentDto dto)
         {
-            var (succeeded, data, error) = await _teacherService.UpdateAssignmentAsync(id, dto);
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.UpdateAssignmentAsync(id, dto, teacherId);
             if (!succeeded)
             {
-                if (error == "Assignment not found.")
+                if (error != null && error.Contains("not found"))
                     return NotFound(new { success = false, message = error });
                 return BadRequest(new { success = false, message = error });
             }
@@ -148,10 +168,14 @@ namespace Gradely.Api.Controllers
         [HttpDelete("assignments/{id}")]
         public async Task<IActionResult> DeleteAssignment(Guid id)
         {
-            var (succeeded, data, error) = await _teacherService.DeleteAssignmentAsync(id);
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.DeleteAssignmentAsync(id, teacherId);
             if (!succeeded)
             {
-                if (error == "Assignment not found.")
+                if (error != null && error.Contains("not found"))
                     return NotFound(new { success = false, message = error });
                 return BadRequest(new { success = false, message = error });
             }

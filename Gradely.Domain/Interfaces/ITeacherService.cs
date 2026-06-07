@@ -16,13 +16,13 @@ namespace Gradely.Domain.Interfaces
     /// </summary>
     public interface ITeacherService
     {
-        Task<(bool Succeeded, object? Data, string? Error)> GetAllAssignmentsAsync();
+        Task<(bool Succeeded, object? Data, string? Error)> GetAllAssignmentsAsync(string teacherId);
 
-        Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionsForAssignmentAsync(Guid assignmentId);
+        Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionsForAssignmentAsync(Guid assignmentId, string teacherId);
 
-        Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionReportAsync(Guid submissionId);
+        Task<(bool Succeeded, object? Data, string? Error)> GetSubmissionReportAsync(Guid submissionId, string teacherId);
 
-        Task<(bool Succeeded, object? Data, string? Error)> GetStatsAsync();
+        Task<(bool Succeeded, object? Data, string? Error)> GetStatsAsync(string teacherId);
 
         /// <summary>
         /// Create a new assignment.
@@ -38,7 +38,7 @@ namespace Gradely.Domain.Interfaces
         /// Used by: PUT /api/teacher/assignments/{id}
         /// Auth: Teacher role
         /// </summary>
-        Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto);
+        Task<(bool Succeeded, object? Data, string? Error)> UpdateAssignmentAsync(Guid id, object dto, string teacherId);
 
         /// <summary>
         /// Delete an assignment by ID.
@@ -47,6 +47,6 @@ namespace Gradely.Domain.Interfaces
         /// Used by: DELETE /api/teacher/assignments/{id}
         /// Auth: Teacher role
         /// </summary>
-        Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id);
+        Task<(bool Succeeded, object? Data, string? Error)> DeleteAssignmentAsync(Guid id, string teacherId);
     }
 }
