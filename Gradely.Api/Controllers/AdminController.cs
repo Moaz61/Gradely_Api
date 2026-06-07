@@ -10,10 +10,12 @@ namespace Gradely.Api.Controllers
     ///
     /// ENDPOINTS:
     ///   GET    /api/admin/users                → list all users (excluding admins)
-    ///   POST   /api/admin/teachers             → create a teacher account
     ///   DELETE /api/admin/users/{id}           → remove a teacher or student
     ///   PUT    /api/admin/teachers/{id}/verify → mark teacher as verified
     ///   GET    /api/admin/stats                → system-wide statistics
+    ///
+    /// NOTE: Teachers now self-register via POST /api/auth/register (with role = "Teacher").
+    ///       The admin's role is to VERIFY teacher accounts, not create them.
     ///
     /// AUTH: every endpoint requires the "Admin" role.
     ///
@@ -39,28 +41,6 @@ namespace Gradely.Api.Controllers
         public async Task<IActionResult> GetAllUsers()
         {
             var (succeeded, data, error) = await _adminService.GetAllUsersAsync();
-            if (!succeeded)
-                return BadRequest(new { success = false, message = error });
-
-            return Ok(new { success = true, data });
-        }
-
-        // ── POST /api/admin/teachers ──────────────────────────────────
-        /// <summary>
-        /// Create a new teacher account.
-        /// </summary>
-        [HttpPost("teachers")]
-        public async Task<IActionResult> CreateTeacher([FromBody] CreateTeacherDto dto)
-        {
-            if (!ModelState.IsValid)
-            {
-                var errors = ModelState.Values
-                    .SelectMany(v => v.Errors)
-                    .Select(e => e.ErrorMessage);
-                return BadRequest(new { success = false, message = string.Join(", ", errors) });
-            }
-
-            var (succeeded, data, error) = await _adminService.CreateTeacherAsync(dto);
             if (!succeeded)
                 return BadRequest(new { success = false, message = error });
 

@@ -36,19 +36,19 @@ namespace Gradely.Api.Controllers
         //  POST /api/auth/register
         // ══════════════════════════════════════════════════════════════
         /// <summary>
-        /// Register a new student account.
+        /// Register a new user account (Student or Teacher).
         /// 
         /// FLOW:
-        ///   Client sends JSON → ASP.NET deserializes to RegisterDto
+        ///   Client sends JSON with role field → ASP.NET deserializes to RegisterDto
         ///   → [ApiController] validates [Required], [EmailAddress], etc. automatically
         ///   → If validation fails, returns 400 without reaching this method
         ///   → If validation passes, this method runs and calls AuthService
         /// 
-        /// [AllowAnonymous] = no JWT token needed (anyone can register)
+        /// ROLE BEHAVIOR:
+        ///   - Student: registered immediately, receives JWT + refresh token
+        ///   - Teacher: registered with IsVerified = false, must wait for admin approval
         /// 
-        /// RESPONSE INCLUDES:
-        ///   - Access token (JWT, expires in 30 minutes)
-        ///   - Refresh token (random string, expires in 30 days)
+        /// [AllowAnonymous] = no JWT token needed (anyone can register)
         /// </summary>
         [HttpPost("register")]
         [AllowAnonymous]

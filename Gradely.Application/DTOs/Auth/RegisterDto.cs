@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Gradely.Domain.Enums;
 
 namespace Gradely.Application.DTOs.Auth
 {
@@ -20,7 +21,8 @@ namespace Gradely.Application.DTOs.Auth
     ///     "fullName": "Moaaz Ahmed",
     ///     "email": "moaaz@gradely.com",
     ///     "password": "Abc123",
-    ///     "confirmPassword": "Abc123"
+    ///     "confirmPassword": "Abc123",
+    ///     "role": "Student"          ← or "Teacher"
     ///   }
     /// </summary>
     public class RegisterDto
@@ -40,5 +42,13 @@ namespace Gradely.Application.DTOs.Auth
         [Required(ErrorMessage = "Confirm password is required.")]
         [Compare("Password", ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The role the user wants to register as.
+        /// Accepts "Student" or "Teacher". User must choose one.
+        /// Admin accounts cannot be created through registration.
+        /// </summary>
+        [Required(ErrorMessage = "Role is required. Please choose 'Student' or 'Teacher'.")]
+        public string Role { get; set; } = string.Empty;
     }
 }

@@ -8,10 +8,12 @@ namespace Gradely.Domain.Interfaces
     /// interface returns "object" — the implementation returns the
     /// concrete DTO and the controller passes it straight through.
     ///
+    /// NOTE: Teachers now self-register via POST /api/auth/register.
+    ///       The admin's role is to VERIFY teacher accounts, not create them.
+    ///
     /// ENDPOINTS COVERED:
     ///   GET    /api/admin/users                → list all users
-    ///   POST   /api/admin/teachers             → create a teacher account
-    ///   DELETE /api/admin/teachers/{id}        → remove a teacher
+    ///   DELETE /api/admin/users/{id}           → remove a teacher or student
     ///   PUT    /api/admin/teachers/{id}/verify → mark teacher as verified
     ///   GET    /api/admin/stats                → system-wide statistics
     /// </summary>
@@ -23,13 +25,8 @@ namespace Gradely.Domain.Interfaces
         Task<(bool Succeeded, object? Data, string? Error)> GetAllUsersAsync();
 
         /// <summary>
-        /// Create a new user with the Teacher role.
-        /// </summary>
-        Task<(bool Succeeded, object? Data, string? Error)> CreateTeacherAsync(object createTeacherDto);
-
-        /// <summary>
-        /// Delete an existing teacher account by ID.
-        /// Only users with the Teacher role can be deleted through this endpoint.
+        /// Delete an existing user account by ID.
+        /// Admin accounts cannot be deleted through this endpoint.
         /// </summary>
         Task<(bool Succeeded, string? Error)> DeleteTeacherAsync(string teacherId);
 

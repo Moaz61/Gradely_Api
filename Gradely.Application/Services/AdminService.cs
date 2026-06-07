@@ -8,8 +8,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Gradely.Application.Services
 {
     /// <summary>
-    /// Admin-facing operations: manage users, create/delete/verify
-    /// teachers, and view system-wide statistics.
+    /// Admin-facing operations: manage users, verify teachers,
+    /// delete accounts, and view system-wide statistics.
+    ///
+    /// NOTE: Teachers now self-register via POST /api/auth/register.
+    ///       The admin's role is to VERIFY teacher accounts, not create them.
     ///
     /// DEPENDENCIES:
     ///   - UserManager: ASP.NET Identity service to create/find/manage users + roles
@@ -63,61 +66,6 @@ namespace Gradely.Application.Services
             }
 
             return (true, userDtos, null);
-        }
-
-        // ── POST /api/admin/teachers ──────────────────────────────────
-        /// <summary>
-        /// Creates a new user account with the Teacher role.
-        ///
-        /// FLOW:
-        ///   1. Cast the object to CreateTeacherDto
-        ///   2. Check if email already exists
-        ///   3. Create the user via Identity (hashes password)
-        ///   4. Assign the "Teacher" role
-        ///   5. Return the created user as UserDto
-        /// </summary>
-        public async Task<(bool Succeeded, object? Data, string? Error)> CreateTeacherAsync(object createTeacherDto)
-        {
-            var dto = createTeacherDto as CreateTeacherDto;
-            if (dto == null)
-                return (false, null, "Invalid teacher data.");
-
-            // Check if email is already taken
-            var existingUser = await _userManager.FindByEmailAsync(dto.Email);
-            if (existingUser != null)
-                return (false, null, "Email is already registered.");
-
-            // Create the ApplicationUser entity
-            var user = new ApplicationUser
-            {
-                UserName = dto.Email,
-                Email = dto.Email,
-                FullName = dto.FullName,
-                CreatedAt = DateTime.UtcNow,
-                IsVerified = false   // admin can verify later
-            };
-
-            var result = await _userManager.CreateAsync(user, dto.Password);
-            if (!result.Succeeded)
-            {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                return (false, null, errors);
-            }
-
-            // Assign the Teacher role
-            await _userManager.AddToRoleAsync(user, UserRole.Teacher.ToString());
-
-            var userDto = new UserDto
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email ?? string.Empty,
-                Role = UserRole.Teacher.ToString(),
-                IsVerified = user.IsVerified,
-                CreatedAt = user.CreatedAt
-            };
-
-            return (true, userDto, null);
         }
 
         // ── DELETE /api/admin/users/{id} ────────────────────────────────

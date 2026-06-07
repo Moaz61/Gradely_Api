@@ -52,15 +52,16 @@ namespace Gradely.Application.Services
         //  REGISTER
         // ══════════════════════════════════════════════════════════════
         /// <summary>
-        /// Creates a new user account and returns a JWT access token + refresh token.
+        /// Creates a new user account. Users can register as Student or Teacher.
         /// 
         /// FLOW:
         ///   1. Cast the object to RegisterDto (because IAuthService uses object)
-        ///   2. Check if email already exists
-        ///   3. Create the user with Identity (hashes password automatically)
-        ///   4. Assign the "Student" role
-        ///   5. Generate a JWT access token + refresh token
-        ///   6. Return both tokens + user info
+        ///   2. Validate the chosen role (only Student or Teacher allowed)
+        ///   3. Check if email already exists
+        ///   4. Create the user with Identity (hashes password automatically)
+        ///   5. Assign the chosen role
+        ///   6. For Students: generate tokens and return them immediately
+        ///   7. For Teachers: set IsVerified = false, return a message to wait for admin approval
         /// </summary>
         public async Task<(bool Succeeded, object? Data, string? Error)> RegisterAsync(object registerDto)
         {
@@ -69,18 +70,33 @@ namespace Gradely.Application.Services
             if (dto == null)
                 return (false, null, "Invalid registration data.");
 
-            // ── Step 2: Check if email is already taken ──
+            // ── Step 2: Validate the chosen role ──
+            // Only Student and Teacher can self-register. Admin accounts are seeded.
+            var role = dto.Role?.Trim();
+            if (string.IsNullOrEmpty(role) ||
+                (!role.Equals(UserRole.Student.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                 !role.Equals(UserRole.Teacher.ToString(), StringComparison.OrdinalIgnoreCase)))
+            {
+                return (false, null, "Invalid role. Please choose 'Student' or 'Teacher'.");
+            }
+
+            // Normalize the role string (e.g. "student" → "Student")
+            bool isTeacher = role.Equals(UserRole.Teacher.ToString(), StringComparison.OrdinalIgnoreCase);
+            var normalizedRole = isTeacher ? UserRole.Teacher.ToString() : UserRole.Student.ToString();
+
+            // ── Step 3: Check if email is already taken ──
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
             if (existingUser != null)
                 return (false, null, "Email is already registered.");
 
-            // ── Step 3: Create the ApplicationUser entity ──
+            // ── Step 4: Create the ApplicationUser entity ──
             var user = new ApplicationUser
             {
                 UserName = dto.Email,       // Identity requires UserName; we use email
                 Email = dto.Email,
                 FullName = dto.FullName,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                IsVerified = !isTeacher      // Students are verified by default, teachers need admin approval
             };
 
             // CreateAsync hashes the password and saves to AspNetUsers table
@@ -92,11 +108,25 @@ namespace Gradely.Application.Services
                 return (false, null, errors);
             }
 
-            // ── Step 4: Assign the Student role ──
-            // Every new user starts as a Student. Admins can upgrade later.
-            await _userManager.AddToRoleAsync(user, UserRole.Student.ToString());
+            // ── Step 5: Assign the chosen role ──
+            await _userManager.AddToRoleAsync(user, normalizedRole);
 
-            // ── Step 5 & 6: Generate tokens and return response ──
+            // ── Step 6 & 7: Handle response based on role ──
+            if (isTeacher)
+            {
+                // Teachers must wait for admin verification before they can login.
+                // Don't issue tokens — they can't use the system yet.
+                return (true, new
+                {
+                    message = "Registration successful! Your teacher account is pending admin verification. You will be able to login once an administrator approves your account.",
+                    email = user.Email,
+                    fullName = user.FullName,
+                    role = normalizedRole,
+                    isVerified = false
+                }, null);
+            }
+
+            // Students get tokens immediately
             var accessToken = await GenerateJwtToken(user);
             var refreshToken = await CreateRefreshTokenAsync(user);
             var roles = await _userManager.GetRolesAsync(user);
@@ -113,8 +143,9 @@ namespace Gradely.Application.Services
         /// FLOW:
         ///   1. Find user by email
         ///   2. Check password with SignInManager
-        ///   3. Generate JWT access token + refresh token
-        ///   4. Return both tokens + user info
+        ///   3. Check if user is a teacher and verify they are approved
+        ///   4. Generate JWT access token + refresh token
+        ///   5. Return both tokens + user info
         /// </summary>
         public async Task<(bool Succeeded, object? Data, string? Error)> LoginAsync(object loginDto)
         {
@@ -136,10 +167,16 @@ namespace Gradely.Application.Services
             // NOTE: We say "Invalid email or password" for BOTH cases (user not found / wrong password)
             // This is a security best practice — don't reveal whether the email exists.
 
-            // ── Step 3 & 4: Generate tokens and return ──
+            // ── Step 3: Block unverified teachers ──
+            var roles = await _userManager.GetRolesAsync(user);
+            if (roles.Contains(UserRole.Teacher.ToString()) && !user.IsVerified)
+            {
+                return (false, null, "Your account has not been verified yet. Please wait for an administrator to approve your account.");
+            }
+
+            // ── Step 4 & 5: Generate tokens and return ──
             var accessToken = await GenerateJwtToken(user);
             var refreshToken = await CreateRefreshTokenAsync(user);
-            var roles = await _userManager.GetRolesAsync(user);
             var response = CreateAuthResponse(user, accessToken, refreshToken, roles);
             return (true, response, null);
         }
