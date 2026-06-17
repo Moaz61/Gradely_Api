@@ -49,6 +49,9 @@ namespace Gradely.Application
             // Phase 6: admin panel
             services.AddScoped<IAdminService, AdminService>();
 
+            // Phase 7: profile management (any authenticated user)
+            services.AddScoped<ProfileService>();
+
             return services;
         }
     }

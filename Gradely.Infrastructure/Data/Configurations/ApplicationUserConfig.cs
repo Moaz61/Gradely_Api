@@ -6,24 +6,13 @@ namespace Gradely.Infrastructure.Data.Configurations
 {
     /// <summary>
     /// EF Core configuration for the ApplicationUser entity.
-    /// 
-    /// WHAT IS IEntityTypeConfiguration?
-    ///   Instead of putting all entity config inside AppDbContext.OnModelCreating
-    ///   (which gets HUGE as you add more entities), we split each entity's config
-    ///   into its own file. This is called the "Configuration Class" pattern.
-    /// 
-    /// HOW DOES EF CORE FIND THIS?
-    ///   In AppDbContext.OnModelCreating, we call:
-    ///     builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-    ///   EF Core scans the assembly for ALL classes that implement 
-    ///   IEntityTypeConfiguration<T> and applies them automatically.
-    ///   No manual registration needed — just create the class and it works!
-    /// 
-    /// WHY THIS PATTERN?
-    ///   1. Each entity's config is in ONE file — easy to find and maintain
-    ///   2. AppDbContext stays clean — no 200-line OnModelCreating
-    ///   3. Each config class is independently testable
-    ///   4. When your team adds a new entity, they just add a new Config class
+    ///
+    /// Configures:
+    ///   - FullName: required, max 100 chars
+    ///   - CreatedAt: default = GETUTCDATE()
+    ///   - IsVerified: default = false
+    ///   - IsDeleted: default = false
+    ///   - Self-referential Teacher → Students relationship via TeacherId FK
     /// </summary>
     public class ApplicationUserConfig : IEntityTypeConfiguration<ApplicationUser>
     {
@@ -34,13 +23,29 @@ namespace Gradely.Infrastructure.Data.Configurations
                    .IsRequired()
                    .HasMaxLength(100);
 
-            // CreatedAt has a default value set by the database
+            // CreatedAt defaults to the current UTC time at the database level
             builder.Property(u => u.CreatedAt)
                    .HasDefaultValueSql("GETUTCDATE()");
 
             // IsVerified defaults to false — admin can verify teacher accounts
             builder.Property(u => u.IsVerified)
                    .HasDefaultValue(false);
+
+            // IsDeleted defaults to false — used for soft-delete tracking
+            builder.Property(u => u.IsDeleted)
+                   .HasDefaultValue(false);
+
+            // ── Self-referential Teacher → Student relationship ──────────
+            // One Teacher (ApplicationUser) can have many Students (ApplicationUser).
+            // A Student has a nullable TeacherId FK pointing to their assigned teacher.
+            // When a teacher is deleted, assigned students have their TeacherId set to null
+            // (cascading is handled programmatically in AdminService to avoid EF limitations
+            //  with self-referential cascade deletes on SQL Server).
+            builder.HasOne(u => u.Teacher)
+                   .WithMany(u => u.Students)
+                   .HasForeignKey(u => u.TeacherId)
+                   .IsRequired(false)
+                   .OnDelete(DeleteBehavior.Restrict); // No DB-level cascade; handled in code
         }
     }
 }

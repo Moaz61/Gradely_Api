@@ -7,21 +7,25 @@ using System.Security.Claims;
 namespace Gradely.Api.Controllers
 {
     /// <summary>
-    /// Teacher API Controller (Phase 5).
+    /// Teacher API Controller — manages assignments, views submissions,
+    /// downloads files, views students, and accesses grade statistics.
     ///
     /// ENDPOINTS:
-    ///   GET    /api/teacher/assignments                       → list all assignments
-    ///   GET    /api/teacher/assignments/{id}/submissions      → all student submissions for one assignment
-    ///   GET    /api/teacher/submissions/{id}/report           → any student's report
-    ///   GET    /api/teacher/stats                             → grade averages + distribution
-    ///   POST   /api/teacher/assignments                      → create a new assignment
-    ///   PUT    /api/teacher/assignments/{id}                  → update an existing assignment
-    ///   DELETE /api/teacher/assignments/{id}                  → delete an assignment
+    ///   GET    /api/teacher/assignments                        → list teacher's assignments
+    ///   POST   /api/teacher/assignments                       → create new assignment
+    ///   GET    /api/teacher/assignments/{id}                  → view single assignment
+    ///   PUT    /api/teacher/assignments/{id}                  → update assignment
+    ///   DELETE /api/teacher/assignments/{id}                  → delete assignment (cascade)
+    ///   GET    /api/teacher/assignments/{id}/submissions      → submissions for assignment
+    ///   GET    /api/teacher/assignments/{id}/student-status   → student submission status grid
+    ///   GET    /api/teacher/submissions/{id}                  → view single submission
+    ///   GET    /api/teacher/submissions/{id}/file             → download student PDF
+    ///   GET    /api/teacher/submissions/{id}/report           → view grading report
+    ///   GET    /api/teacher/students                          → list assigned students
+    ///   GET    /api/teacher/submissions/student/{studentId}   → all submissions by a student
+    ///   GET    /api/teacher/stats                             → grade statistics
     ///
     /// AUTH: every endpoint requires the "Teacher" role.
-    ///
-    /// ROUTE: explicit "api/teacher" instead of [controller] so the URLs
-    /// match the spec exactly (/api/teacher/...) regardless of the class name.
     /// </summary>
     [Route("api/teacher")]
     [ApiController]
@@ -35,10 +39,14 @@ namespace Gradely.Api.Controllers
             _teacherService = teacherService;
         }
 
+        // ── Helper ────────────────────────────────────────────────────
+        private string? GetTeacherId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        // ── GET /api/teacher/assignments ──────────────────────────────
         [HttpGet("assignments")]
         public async Task<IActionResult> GetAllAssignments()
         {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var teacherId = GetTeacherId();
             if (string.IsNullOrEmpty(teacherId))
                 return Unauthorized(new { success = false, message = "User ID not found in token." });
 
@@ -49,69 +57,11 @@ namespace Gradely.Api.Controllers
             return Ok(new { success = true, data });
         }
 
-        [HttpGet("assignments/{id}/submissions")]
-        public async Task<IActionResult> GetSubmissionsForAssignment(Guid id)
-        {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(teacherId))
-                return Unauthorized(new { success = false, message = "User ID not found in token." });
-
-            var (succeeded, data, error) = await _teacherService.GetSubmissionsForAssignmentAsync(id, teacherId);
-            if (!succeeded)
-                return NotFound(new { success = false, message = error });
-
-            return Ok(new { success = true, data });
-        }
-
-        [HttpGet("submissions/{id}/report")]
-        public async Task<IActionResult> GetSubmissionReport(Guid id)
-        {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(teacherId))
-                return Unauthorized(new { success = false, message = "User ID not found in token." });
-
-            var (succeeded, data, error) = await _teacherService.GetSubmissionReportAsync(id, teacherId);
-            if (!succeeded)
-                return NotFound(new { success = false, message = error });
-
-            return Ok(new { success = true, data });
-        }
-
-        [HttpGet("stats")]
-        public async Task<IActionResult> GetStats()
-        {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(teacherId))
-                return Unauthorized(new { success = false, message = "User ID not found in token." });
-
-            var (succeeded, data, error) = await _teacherService.GetStatsAsync(teacherId);
-            if (!succeeded)
-                return BadRequest(new { success = false, message = error });
-
-            return Ok(new { success = true, data });
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        //  POST /api/teacher/assignments — Create a new assignment
-        // ══════════════════════════════════════════════════════════════
-        /// <summary>
-        /// Create a new assignment.
-        ///
-        /// FLOW:
-        ///   1. Teacher sends POST with JSON body (title, description, dueDate, maxGrade)
-        ///   2. ASP.NET validates the DTO (Data Annotations)
-        ///   3. Service creates the Assignment entity and saves to DB
-        ///   4. Returns 201 Created with the new assignment data
-        ///
-        /// RETURNS:
-        ///   201 Created → { success: true, data: { id, title, ... } }
-        ///   400 Bad Request → validation errors
-        ///   401/403 → unauthorized or wrong role
-        /// </summary>
+        // ── POST /api/teacher/assignments ─────────────────────────────
         [HttpPost("assignments")]
         public async Task<IActionResult> CreateAssignment([FromBody] CreateAssignmentDto dto)
         {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var teacherId = GetTeacherId();
             if (string.IsNullOrEmpty(teacherId))
                 return Unauthorized(new { success = false, message = "User ID not found in token." });
 
@@ -122,22 +72,26 @@ namespace Gradely.Api.Controllers
             return StatusCode(201, new { success = true, data });
         }
 
-        // ══════════════════════════════════════════════════════════════
-        //  PUT /api/teacher/assignments/{id} — Update an assignment
-        // ══════════════════════════════════════════════════════════════
-        /// <summary>
-        /// Update an existing assignment.
-        ///
-        /// RETURNS:
-        ///   200 OK → { success: true, data: { id, title, ... } }
-        ///   404 Not Found → assignment doesn't exist
-        ///   400 Bad Request → validation errors
-        ///   401/403 → unauthorized or wrong role
-        /// </summary>
+        // ── GET /api/teacher/assignments/{id} ─────────────────────────
+        [HttpGet("assignments/{id}")]
+        public async Task<IActionResult> GetAssignmentById(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetAssignmentByIdAsync(id, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── PUT /api/teacher/assignments/{id} ─────────────────────────
         [HttpPut("assignments/{id}")]
         public async Task<IActionResult> UpdateAssignment(Guid id, [FromBody] UpdateAssignmentDto dto)
         {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var teacherId = GetTeacherId();
             if (string.IsNullOrEmpty(teacherId))
                 return Unauthorized(new { success = false, message = "User ID not found in token." });
 
@@ -152,23 +106,11 @@ namespace Gradely.Api.Controllers
             return Ok(new { success = true, data });
         }
 
-        // ══════════════════════════════════════════════════════════════
-        //  DELETE /api/teacher/assignments/{id} — Delete an assignment
-        // ══════════════════════════════════════════════════════════════
-        /// <summary>
-        /// Delete an assignment by ID.
-        /// Will refuse if the assignment has any submissions (safety check).
-        ///
-        /// RETURNS:
-        ///   200 OK → { success: true, data: { message: "..." } }
-        ///   404 Not Found → assignment doesn't exist
-        ///   400 Bad Request → has submissions, can't delete
-        ///   401/403 → unauthorized or wrong role
-        /// </summary>
+        // ── DELETE /api/teacher/assignments/{id} ──────────────────────
         [HttpDelete("assignments/{id}")]
         public async Task<IActionResult> DeleteAssignment(Guid id)
         {
-            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var teacherId = GetTeacherId();
             if (string.IsNullOrEmpty(teacherId))
                 return Unauthorized(new { success = false, message = "User ID not found in token." });
 
@@ -182,6 +124,135 @@ namespace Gradely.Api.Controllers
 
             return Ok(new { success = true, data });
         }
+
+        // ── GET /api/teacher/assignments/{id}/submissions ─────────────
+        [HttpGet("assignments/{id}/submissions")]
+        public async Task<IActionResult> GetSubmissionsForAssignment(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetSubmissionsForAssignmentAsync(id, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/assignments/{id}/student-status ──────────
+        [HttpGet("assignments/{id}/student-status")]
+        public async Task<IActionResult> GetAssignmentStudentStatus(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetAssignmentStudentStatusAsync(id, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/submissions/{id} ─────────────────────────
+        // NOTE: This route must come BEFORE submissions/student/{studentId} to avoid
+        //       ambiguous routing. ASP.NET Core matches the more specific route first.
+        [HttpGet("submissions/{id:guid}")]
+        public async Task<IActionResult> GetSubmissionById(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetSubmissionByIdAsync(id, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/submissions/{id}/file ────────────────────
+        [HttpGet("submissions/{id}/file")]
+        public async Task<IActionResult> DownloadSubmissionFile(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, filePath, originalFileName, error) =
+                await _teacherService.GetSubmissionFilePathAsync(id, teacherId);
+
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            // Build the full disk path from the relative stored path
+            var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", filePath!);
+            if (!System.IO.File.Exists(fullPath))
+                return NotFound(new { success = false, message = "File not found on server." });
+
+            var fileBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+            return File(fileBytes, "application/pdf", originalFileName ?? "submission.pdf");
+        }
+
+        // ── GET /api/teacher/submissions/{id}/report ──────────────────
+        [HttpGet("submissions/{id}/report")]
+        public async Task<IActionResult> GetSubmissionReport(Guid id)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetSubmissionReportAsync(id, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/students ─────────────────────────────────
+        [HttpGet("students")]
+        public async Task<IActionResult> GetStudents()
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetStudentsAsync(teacherId);
+            if (!succeeded)
+                return BadRequest(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/submissions/student/{studentId} ──────────
+        [HttpGet("submissions/student/{studentId}")]
+        public async Task<IActionResult> GetStudentSubmissions(string studentId)
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetStudentSubmissionsAsync(studentId, teacherId);
+            if (!succeeded)
+                return NotFound(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
+
+        // ── GET /api/teacher/stats ────────────────────────────────────
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats()
+        {
+            var teacherId = GetTeacherId();
+            if (string.IsNullOrEmpty(teacherId))
+                return Unauthorized(new { success = false, message = "User ID not found in token." });
+
+            var (succeeded, data, error) = await _teacherService.GetStatsAsync(teacherId);
+            if (!succeeded)
+                return BadRequest(new { success = false, message = error });
+
+            return Ok(new { success = true, data });
+        }
     }
 }
-
